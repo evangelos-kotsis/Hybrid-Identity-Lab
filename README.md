@@ -25,14 +25,15 @@ lab.hybrid.local (192.168.10.0/24)
 │   ├── Active Directory Domain Services
 │   ├── DNS Server
 │   ├── Group Policy Management
-│   └── Entra Connect Sync (in progress)
+│   └── Microsoft Entra Cloud Sync Agent (installed)
 └── SERVER02 (192.168.10.20)
     ├── Domain Member Server
     └── File and Storage Services (planned)
 
 Cloud
 └── Microsoft Entra ID (Azure AD)
-    └── Hybrid Identity Sync (in progress)
+    └── Cloud Sync Configuration: lab.hybrid.local → Entra ID
+        └── Status: Agent Active | Sync quarantined (home lab network restriction)
 ```
 
 ---
@@ -47,7 +48,7 @@ Cloud
 | DNS Server | Name resolution for domain |
 | Group Policy (GPO) | Centralized policy management |
 | Microsoft Entra ID | Cloud identity platform |
-| Microsoft Entra Connect | Hybrid identity synchronization |
+| Microsoft Entra Cloud Sync | Modern hybrid identity synchronization agent |
 | PowerShell | Automation and configuration |
 
 ---
@@ -81,7 +82,19 @@ hybrid-identity-lab/
 │       ├── 21-users-upn-updated.png
 │       ├── 23-aadconnect-installer-start.png
 │       ├── 26-syncadmin-created.png
-│       └── 27-aadconnect-signin-config.png
+│       ├── 27-aadconnect-signin-config.png
+│       ├── 28-cloud-sync-agents-empty.png
+│       ├── 29-cloud-sync-configure-service-account.png
+│       ├── 30-cloud-sync-agent-confirm.png
+│       ├── 31-cloud-sync-agent-complete.png
+│       ├── 32-cloud-sync-agent-active.png
+│       ├── 33-cloud-sync-new-configuration.png
+│       ├── 34-cloud-sync-configuration-created.png
+│       ├── 35-cloud-sync-review-enable.png
+│       ├── 36-cloud-sync-configuration-enabled.png
+│       ├── 37-cloud-sync-agent-service-running.png
+│       ├── 38-cloud-sync-network-adapters.png
+│       └── 39-cloud-sync-connectivity-test.png
 └── scripts/
     ├── dc01-initial-setup.ps1
     ├── create-ou-structure.ps1
@@ -189,42 +202,96 @@ Configured two GPOs to demonstrate centralized policy management across the doma
 
 ---
 
-### 🔄 Module 5 — Azure Entra ID Integration (In Progress)
+### ✅ Module 5 — Azure Entra ID Integration (Cloud Sync)
 
-Configured the Azure Entra ID tenant and began hybrid identity sync setup. Added the `onmicrosoft.com` UPN suffix to the on-premises AD forest and updated all user UPNs to match the cloud tenant domain, preparing them for synchronization.
+Configured hybrid identity synchronization between the on-premises Active Directory and Microsoft Entra ID using **Microsoft Entra Cloud Sync** — the modern recommended replacement for the legacy Entra Connect Sync tool.
 
 **Tenant:** `kotsvagg83gmail.onmicrosoft.com`
-**Sync Tool:** Microsoft Entra Connect Sync → migrating to Entra Cloud Sync
+**Sync Tool:** Microsoft Entra Cloud Sync
 **Sync Method:** Password Hash Synchronization (PHS)
+**Sync Direction:** AD → Microsoft Entra ID
 
-**UPN suffix added to AD forest:**
-```
-kotsvagg83gmail.onmicrosoft.com
-```
+#### What was accomplished:
 
-**Users updated with cloud-compatible UPNs:**
+**UPN Preparation (carried over from initial setup):**
+
+Added the `onmicrosoft.com` UPN suffix to the on-premises AD forest and updated all user UPNs to match the cloud tenant domain — a critical prerequisite for hybrid identity sync to function correctly.
+
 ```
 alice.johnson@kotsvagg83gmail.onmicrosoft.com
 bob.smith@kotsvagg83gmail.onmicrosoft.com
 carol.white@kotsvagg83gmail.onmicrosoft.com
 ```
 
-> ⚠️ **Note:** During Entra Connect Sync configuration, an `AADSTS700027` error was encountered — a known issue with expired service principal certificates on Entra Connect application registrations in free-tier tenants. Resolution: migrating to **Microsoft Entra Cloud Sync**, the modern recommended replacement for Connect Sync as of 2024. Cloud Sync configuration will be documented in the next update.
+**Cloud Sync Agent Installation on DC01:**
+
+Downloaded and installed the Microsoft Entra Provisioning Agent directly on DC01. During installation, a **Group Managed Service Account (gMSA)** was automatically created (`lab.hybrid.local\provAgentgMSA`) — a best-practice service account with auto-rotating passwords, requiring no manual credential management.
+
+The agent was authenticated to Entra ID using the dedicated `syncadmin@kotsvagg83gmail.onmicrosoft.com` account (a native `.onmicrosoft.com` account with Global Administrator role), as the primary Gmail-based account is treated as a Guest in certain administrative contexts.
+
+**Cloud Sync Configuration:**
+
+Created a new Cloud Sync configuration in the Entra Admin Center targeting `lab.hybrid.local` with Password Hash Sync enabled. The agent registered successfully and appeared as **Active** in the Entra portal.
+
+| Step | Result |
+|---|---|
+| Agent installation | ✅ Complete |
+| gMSA service account creation | ✅ Automatic |
+| Agent registration in Entra ID | ✅ Active |
+| Cloud Sync configuration created | ✅ Complete |
+| Password Hash Sync enabled | ✅ Enabled |
+| Full user sync to Entra ID | ⚠️ Quarantined (see below) |
+
+#### Troubleshooting — HybridIdentityServiceAgentTimeout:
+
+After enabling the configuration, the sync entered a **quarantined** state with a `HybridIdentityServiceAgentTimeout` error. A systematic troubleshooting process was conducted to identify the root cause:
+
+```powershell
+# Step 1 — Verify agent service is running
+Get-Service -Name "Microsoft Azure AD Connect Provisioning Agent" | Select Status, DisplayName
+# Result: Running ✅
+
+# Step 2 — Verify basic internet connectivity
+Test-NetConnection -ComputerName "login.microsoftonline.com" -Port 443
+# Result: TcpTestSucceeded: True ✅
+
+# Step 3 — Check network interfaces
+Get-NetIPAddress -AddressFamily IPv4 | Select InterfaceAlias, IPAddress
+# Result: Ethernet0 (192.168.10.10), Ethernet1 (192.168.50.139 - NAT) ✅
+
+# Step 4 — Test Microsoft App Proxy endpoint (critical for Cloud Sync agent)
+Test-NetConnection -ComputerName "proxy-hsgeneral-weur-ams01p-3.his.msapproxy.net" -Port 443
+# Result: TcpTestSucceeded: False ❌
+
+# Step 5 — Test Azure Service Bus connectivity
+Test-NetConnection -ComputerName "servicebus.windows.net" -Port 443
+Test-NetConnection -ComputerName "servicebus.windows.net" -Port 5671
+# Result: Both False ❌
+```
+
+**Root Cause:** The home lab network (ISP router/firewall) blocks outbound connections to Microsoft App Proxy and Service Bus endpoints — the specific communication channels used by the Cloud Sync agent to relay data to Azure. Basic HTTPS connectivity to general internet endpoints works, but the Microsoft-specific proxy infrastructure endpoints are unreachable.
+
+> **Note:** This is a known limitation of home lab environments. In enterprise environments, these endpoints are reachable via corporate internet egress or ExpressRoute. The required endpoints are documented in [Microsoft's Cloud Sync prerequisites](https://learn.microsoft.com/en-us/entra/identity/hybrid/cloud-sync/how-to-prerequisites).
 
 | Screenshot | Description |
 |---|---|
-| ![19](docs/screenshots/19-entra-tenant-domain.png) | Entra ID tenant overview — primary domain confirmed |
-| ![20](docs/screenshots/20-upn-suffix-added.png) | UPN suffix added to AD forest |
-| ![21](docs/screenshots/21-users-upn-updated.png) | All users updated with cloud-compatible UPN |
-| ![23](docs/screenshots/23-aadconnect-installer-start.png) | Entra Connect Sync installer launched |
-| ![26](docs/screenshots/26-syncadmin-created.png) | Dedicated sync admin account created in Entra ID |
-| ![27](docs/screenshots/27-aadconnect-signin-config.png) | Sign-in configuration — UPN suffix mapping |
+| ![28](docs/screenshots/28-cloud-sync-agents-empty.png) | Entra Cloud Sync — no agents registered yet |
+| ![29](docs/screenshots/29-cloud-sync-configure-service-account.png) | Agent installer — Configure Service Account (gMSA) |
+| ![30](docs/screenshots/30-cloud-sync-agent-confirm.png) | Agent configuration summary before confirmation |
+| ![31](docs/screenshots/31-cloud-sync-agent-complete.png) | Agent installation complete |
+| ![32](docs/screenshots/32-cloud-sync-agent-active.png) | DC01.lab.hybrid.local registered as Active in Entra ID |
+| ![33](docs/screenshots/33-cloud-sync-new-configuration.png) | New Cloud Sync configuration — lab.hybrid.local selected |
+| ![34](docs/screenshots/34-cloud-sync-configuration-created.png) | Configuration successfully saved |
+| ![35](docs/screenshots/35-cloud-sync-review-enable.png) | Review and enable — all settings confirmed |
+| ![36](docs/screenshots/36-cloud-sync-configuration-enabled.png) | Configuration enabled — provisioning started |
+| ![37](docs/screenshots/37-cloud-sync-agent-service-running.png) | PowerShell — Agent service confirmed Running on DC01 |
+| ![38](docs/screenshots/38-cloud-sync-network-adapters.png) | PowerShell — Network adapters and IPs on DC01 |
+| ![39](docs/screenshots/39-cloud-sync-connectivity-test.png) | PowerShell — Connectivity tests showing blocked endpoints |
 
 ---
 
 ### 📋 Planned — Module 6 and Beyond
 
-- [ ] Complete Entra Cloud Sync configuration and verify user sync
 - [ ] Configure DHCP server role on DC01
 - [ ] Deploy File Services role on SERVER02
 - [ ] Configure DFS Namespace
@@ -236,7 +303,7 @@ carol.white@kotsvagg83gmail.onmicrosoft.com
 
 ## 🔑 Key Concepts Demonstrated
 
-**Hybrid Identity** — Users exist simultaneously in on-premises AD and Azure Entra ID, synchronized via Entra Connect. This is the most common enterprise identity architecture for organizations in transition to the cloud.
+**Hybrid Identity** — Users exist simultaneously in on-premises AD and Azure Entra ID, synchronized via Entra Cloud Sync. This is the most common enterprise identity architecture for organizations in transition to the cloud.
 
 **Domain Controller promotion** — Using `Install-ADDSForest` to configure a new AD forest, including DNS integration and FSMO role assignment.
 
@@ -246,15 +313,25 @@ carol.white@kotsvagg83gmail.onmicrosoft.com
 
 **UPN suffix alignment** — Ensuring on-premises user UPNs match the cloud tenant domain before sync — a critical prerequisite for hybrid identity to function correctly.
 
+**Group Managed Service Accounts (gMSA)** — Automatically provisioned service accounts with auto-rotating passwords, used by the Cloud Sync agent for secure operation without manual credential management.
+
+**Hybrid Identity Troubleshooting** — Systematic verification of agent health, network connectivity, and required Microsoft endpoints to diagnose sync failures in hybrid environments.
+
 ---
 
 ## ⚠️ Known Issues and Troubleshooting Notes
 
 **AADSTS700027 — Expired certificate on Entra Connect application:**
-During Entra Connect Sync setup, the installer failed with a service principal certificate expiry error. This is a known issue with specific versions of Connect Sync on free-tier tenants. Resolution: migrating to **Entra Cloud Sync**, which does not rely on the same certificate-based mechanism.
+During initial Entra Connect Sync setup, the installer failed with a service principal certificate expiry error. This is a known issue with specific versions of Connect Sync on free-tier tenants. Resolution: migrated to **Entra Cloud Sync**, the modern recommended replacement as of 2024.
 
 **Non-routable domain warning:**
 The on-premises domain `lab.hybrid.local` uses a `.local` suffix which is non-routable and cannot be verified in Azure. This is expected in lab environments. Mitigation: add the `onmicrosoft.com` tenant domain as a UPN suffix in AD and update all user UPNs before sync.
+
+**HybridIdentityServiceAgentTimeout — Home lab network restriction:**
+The Cloud Sync agent requires outbound access to Microsoft App Proxy endpoints (`*.msapproxy.net`) and Azure Service Bus (`servicebus.windows.net`, ports 443 and 5671). These are blocked by home ISP routers/firewalls, preventing the agent from relaying sync data to Azure. In enterprise environments this is resolved via corporate egress policies or ExpressRoute. The agent itself is correctly installed, registered, and running — the limitation is purely at the network layer.
+
+**Guest user restriction on Configurations page:**
+The primary `kotsvagg83@gmail.com` account (external/Microsoft Account) was treated as a Guest user in certain Entra admin contexts, blocking access to Cloud Sync Configurations. Resolution: use the native `.onmicrosoft.com` admin account (`syncadmin@kotsvagg83gmail.onmicrosoft.com`) for Cloud Sync configuration tasks.
 
 ---
 
