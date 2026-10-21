@@ -5,6 +5,8 @@
 ![Windows Server](https://img.shields.io/badge/Windows%20Server-2022-0078D4?logo=windows)
 ![VMware](https://img.shields.io/badge/VMware-Workstation-607078?logo=vmware)
 
+Status: Completed . The lab environment has been torn down; this repository documents the build, the configuration and the results.
+
 A hands-on hybrid identity and infrastructure lab combining on-premises Windows Server 2022 with Microsoft Azure Entra ID. Built to demonstrate enterprise-grade Active Directory, identity synchronization, networking, storage, virtualization, and cloud integration skills — aligned with **AZ-800** and **AZ-104** certification objectives.
 
 ---
