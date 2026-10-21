@@ -5,7 +5,7 @@
 ![Windows Server](https://img.shields.io/badge/Windows%20Server-2022-0078D4?logo=windows)
 ![VMware](https://img.shields.io/badge/VMware-Workstation-607078?logo=vmware)
 
-Status: Completed . The lab environment has been torn down; this repository documents the build, the configuration and the results.
+> **Status:** Completed (2026). The lab environment has been torn down. This repository documents the build, configuration and results.
 
 A hands-on hybrid identity and infrastructure lab combining on-premises Windows Server 2022 with Microsoft Azure Entra ID. Built to demonstrate enterprise-grade Active Directory, identity synchronization, networking, storage, virtualization, and cloud integration skills — aligned with **AZ-800** and **AZ-104** certification objectives.
 
@@ -291,6 +291,15 @@ Connected DC01 (via Azure Arc) to Azure Monitor and the existing Log Analytics W
 | Azure Arc | On-premises server onboarding, connected machine agent |
 | Azure Monitor | Log Analytics integration, metrics collection, hybrid monitoring |
 | Security | Password policies, account lockout, GPO-based hardening |
+
+---
+## Lessons Learned
+
+- **Entra Connect Sync failed (AADSTS700027)** with an expired service principal certificate on my tenant. I switched to Entra Cloud Sync, which is agent-based, lighter, and Microsoft's current direction. I learned to check which sync option fits the tenant before building around it.
+- **UPN suffixes must match a verified domain in Entra ID.** I had to add the tenant's .onmicrosoft.com suffix and update the user UPNs before synchronization worked.
+- **Hyper-V inside VMware needs nested virtualization** (VT-x/EPT exposed to the guest) before the role can be installed.
+- **Azure Arc and Azure Monitor** let an on-prem domain controller be managed and monitored from Azure with the same tooling as cloud VMs, which is the core idea of hybrid management.
+- **What I would do differently:** script the whole build (PowerShell/DSC) instead of using the GUI, and deploy the Azure side with Terraform so the lab can be rebuilt in minutes.
 
 ---
 
