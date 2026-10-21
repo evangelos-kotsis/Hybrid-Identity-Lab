@@ -53,7 +53,7 @@ A hands-on hybrid identity and infrastructure lab combining on-premises Windows 
 | DC01 IP | 192.168.10.10 |
 | SERVER02 IP | 192.168.10.20 |
 | Network | VMnet10 — Host-only (192.168.10.0/24) |
-| Azure Tenant | kotsvagg83gmail.onmicrosoft.com |
+| Azure Tenant | <tenant>.onmicrosoft.com |
 | Azure Region | West Europe |
 
 ---
@@ -99,7 +99,7 @@ Installed the AD DS role on DC01, promoted it to a domain controller, and built 
 - Domain: `lab.hybrid.local`
 - OU Structure: `HybridLab > Users / Computers / Groups / ServiceAccounts`
 - Test users: Alice Johnson, Bob Smith, Carol White
-- UPN suffix: `kotsvagg83gmail.onmicrosoft.com`
+- UPN suffix: `<tenant>.onmicrosoft.com`
 
 ![AD DS Role Installed](docs/screenshots/04-adds-role-installed.png)
 ![Domain Controller Verified](docs/screenshots/06-domain-controller-verified.png)
@@ -149,9 +149,9 @@ Created and linked two GPOs using Group Policy Management Console (GPMC) and ver
 Configured identity synchronization between on-premises Active Directory and Azure Entra ID using Microsoft Entra Cloud Sync (replacing the legacy Connect Sync due to certificate compatibility on free-tier tenants).
 
 **Key configurations:**
-- UPN suffix added: `kotsvagg83gmail.onmicrosoft.com`
+- UPN suffix added: `<tenant>.onmicrosoft.com`
 - All user UPNs updated to match Azure tenant
-- Sync admin account created: `syncadmin@kotsvagg83gmail.onmicrosoft.com`
+- Sync admin account created: `syncadmin@<tenant>.onmicrosoft.com`
 - Entra Cloud Sync agent installed on DC01
 - Sync configuration enabled and verified
 
